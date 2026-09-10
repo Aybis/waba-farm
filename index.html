@@ -3,90 +3,78 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>WABA Farm — Peternakan AI Agent</title>
+  <meta name="theme-color" content="#f5f6f4" />
+  <title>WABA Workstation — Ruang Monitoring</title>
   <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="workstations.css" />
 </head>
 <body>
-
-  <header class="topbar">
-    <div class="brand">
-      <div class="logo">W</div>
-      <div>
-        <h1>WABA Farm</h1>
-        <p>Setiap nomor WABA = satu hewan AI · makan = lagi kerja · error = notif dari hewan</p>
-      </div>
+  <aside class="sidebar">
+    <a class="brand" href="./" aria-label="WABA Workstation beranda">
+      <span class="logo" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M5 6h22v15H5zM11 26h10M16 21v5M10 11h4v4h-4zM18 11h4v4h-4z"/></svg></span>
+      <span><strong>WABA<span class="brand-accent">.space</span></strong><small>EVERY NUMBER, A WORKSPACE</small></span>
+    </a>
+    <div class="nav-label">WORKSPACE</div>
+    <nav class="view-switch" aria-label="Tampilan dashboard">
+      <button id="viewWorkstations" class="vs-btn active" aria-pressed="true"><span aria-hidden="true">▦</span> Workstations <span class="nav-arrow">↗</span></button>
+      <button id="viewAgents" class="vs-btn" aria-pressed="false"><span aria-hidden="true">☷</span> Agent View</button>
+      <button id="viewFlow" class="vs-btn" aria-pressed="false"><span aria-hidden="true">⌁</span> Traffic Flow</button>
+    </nav>
+    <div class="nav-label service-nav-label">SERVICES <span id="serviceCount">2</span></div>
+    <nav id="serviceNav" class="service-nav" aria-label="Filter service"></nav>
+    <div class="sidebar-bottom">
+      <button id="settingsBtn" class="settings-link"><span aria-hidden="true">⚙</span> Nomor &amp; Service</button>
+      <div class="workspace-note"><span class="live-dot"></span><div><strong>Local workspace</strong><small>Data simulasi · refresh 15 detik</small></div></div>
+      <div class="sidebar-foot">A little space for every connection.</div>
     </div>
-    <div class="controls">
-      <div class="view-switch">
-        <button id="viewFarm" class="vs-btn active">🌾 Farm View</button>
-        <button id="viewAgents" class="vs-btn">🤖 Agent View</button>
-        <button id="viewFlow" class="vs-btn">📊 Flow View</button>
-      </div>
-      <span id="updated" class="updated">—</span>
-      <button id="liveBtn" class="btn active">⏸ Pause</button>
-      <button id="bubbleBtn" class="btn active" title="Tampilkan / sembunyikan bubble error & chat">💬 Bubble</button>
-      <button id="refreshBtn" class="btn ghost">↻ Refresh</button>
-      <button id="settingsBtn" class="btn ghost">⚙ Nomor &amp; Service</button>
-    </div>
-  </header>
+  </aside>
 
-  <section class="kpis" id="kpis"></section>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="breadcrumb">Workspace <span>/</span> <b id="pageName">Workstations</b></div>
+      <div class="header-meta"><span class="demo-chip">DEMO DATA</span><span class="avatar" aria-label="Operations workspace">OP</span></div>
+    </header>
+    <main class="main-content">
+      <section class="page-heading">
+        <div><div class="eyebrow">YOUR WABA, AT WORK</div><h1>Workstation overview<span class="heading-dot">.</span></h1><p>Satu nomor, satu bilik. Pantau aktivitas, antrean, dan koneksi dalam satu ruang.</p></div>
+        <div class="refresh-controls"><span id="updated" class="updated">Belum diperbarui</span><div><button id="liveBtn" class="btn live-btn active" aria-pressed="true">Ⅱ Live aktif</button><button id="refreshBtn" class="btn" title="Perbarui data sekarang">↻ Refresh</button></div></div>
+      </section>
 
-  <!-- ===== FARM VIEW (default) ===== -->
-  <main id="farmView" class="farm-grid"></main>
+      <section class="kpis" id="kpis" aria-label="Ringkasan metrik"></section>
 
-  <!-- ===== AGENT VIEW ===== -->
-  <main id="agentView" class="agent-grid hidden"></main>
+      <section class="workspace-toolbar" aria-label="Filter workstation">
+        <div class="toolbar-heading"><h2>Ruang operasi <span id="visibleCount" class="count-pill">0</span></h2><span id="scopeLabel">Semua service</span></div>
+        <div class="filters">
+          <label class="search-field"><span aria-hidden="true">⌕</span><input id="searchInput" type="search" placeholder="Cari nomor atau service…" aria-label="Cari nomor atau service" /></label>
+          <label class="sr-only" for="serviceFilter">Filter service</label><select id="serviceFilter"><option value="">Semua service</option></select>
+          <label class="sr-only" for="stateFilter">Filter status</label><select id="stateFilter"><option value="">Semua status</option><option value="working">Working</option><option value="idle">Standby</option><option value="warning">Warning</option><option value="error">Error</option></select>
+          <button id="bubbleBtn" class="btn bubble-toggle active" aria-pressed="true" title="Tampilkan atau sembunyikan semua bubble status, termasuk error"><span aria-hidden="true">▱</span> Bubble on</button>
+        </div>
+      </section>
+      <div class="floor-caption"><span><span class="floor-icon" aria-hidden="true">▦</span> LIVE FLOOR PLAN <span class="caption-divider">/</span> Klik bilik untuk detail sesi</span><div id="stateLegend" class="state-legend" aria-label="Jumlah per status"></div></div>
 
-  <!-- ===== FLOW VIEW ===== -->
-  <main id="flowView" class="cards hidden"></main>
+      <section id="workstationView" class="workstation-grid" aria-label="Bilik workstation"></section>
+      <section id="agentView" class="agent-grid hidden" aria-label="Agent View"></section>
+      <section id="flowView" class="cards hidden" aria-label="Traffic Flow"></section>
+      <div id="emptyState" class="empty-state hidden"><span aria-hidden="true">⌕</span><h3>Tidak ada workstation ditemukan</h3><p>Coba nomor lain atau ubah filter service dan status.</p><button id="clearFilters" class="btn">Reset filter</button></div>
 
-  <section class="table-section">
-    <h2>Status Semua Hewan (Agent)</h2>
-    <table id="numTable">
-      <thead>
-        <tr>
-          <th>Hewan</th><th>Nomor</th><th>Service</th><th>Status</th>
-          <th class="num">Pesan</th><th class="num">Sukses</th><th class="num">Error</th>
-          <th class="num">Latency</th>
-        </tr>
-      </thead>
-      <tbody id="numBody"></tbody>
-    </table>
-  </section>
+      <section class="table-section">
+        <div class="table-heading"><div><h2>Detail nomor WABA</h2><p>Metrik dari workstation yang ditampilkan.</p></div><span class="table-hint">Klik nomor untuk membuka sesi ↗</span></div>
+        <div class="table-scroll"><table id="numTable"><thead><tr><th>Workstation</th><th>Nomor WABA</th><th>Service</th><th>Status</th><th class="num">Total pesan</th><th class="num">Success rate</th><th class="num">Error</th><th class="num">Latency</th></tr></thead><tbody id="numBody"></tbody></table></div>
+      </section>
+      <footer class="page-footer"><span><span class="live-dot"></span> WABA Workstation <span class="footer-separator">/</span> Operations, with a human touch.</span><span>Simulasi telemetry · bukan data produksi</span></footer>
+    </main>
+  </div>
 
   <div id="tooltip" class="tooltip hidden"></div>
-
-  <!-- ===== AGENT DETAIL MODAL ===== -->
-  <div id="agentModal" class="modal hidden">
-    <div class="modal-card wide">
-      <div class="modal-head">
-        <h2 id="amTitle">Agent Detail</h2>
-        <button id="amClose" class="btn ghost">✕ Tutup</button>
-      </div>
-      <div id="amStats" class="am-stats"></div>
-      <h3>Session Terakhir — Waterfall</h3>
-      <div id="amSpans" class="spans"></div>
-      <h3>Event Log</h3>
-      <div id="amEvents" class="events full"></div>
-    </div>
+  <div id="agentModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="amTitle">
+    <div class="modal-card wide"><div class="modal-head"><div><div class="eyebrow">WORKSTATION SESSION</div><h2 id="amTitle">Detail Workstation</h2></div><button id="amClose" class="btn ghost">✕ Tutup</button></div><div id="amStats" class="am-stats"></div><h3>Session terakhir — Waterfall</h3><div id="amSpans" class="spans"></div><h3>Event log</h3><div id="amEvents" class="events full"></div></div>
   </div>
-
-  <!-- ===== SETTINGS MODAL ===== -->
-  <div id="settingsModal" class="modal hidden">
-    <div class="modal-card">
-      <h2>Konfigurasi Service &amp; Nomor</h2>
-      <p class="muted">Nomor dipisah koma. Setiap nomor = satu kandang + satu hewan.</p>
-      <div id="svcForms"></div>
-      <button id="addSvc" class="btn ghost">+ Tambah Service</button>
-      <div class="modal-actions">
-        <button id="saveCfg" class="btn">💾 Simpan</button>
-        <button id="resetCfg" class="btn ghost">Reset Default</button>
-        <button id="closeCfg" class="btn ghost">Batal</button>
-      </div>
-    </div>
+  <div id="settingsModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+    <div class="modal-card"><div class="eyebrow">WORKSPACE SETTINGS</div><h2 id="settingsTitle">Konfigurasi Service &amp; Nomor</h2><p class="muted">Pisahkan nomor dengan koma. Setiap nomor memiliki satu bilik dan satu operator.</p><div id="svcForms"></div><button id="addSvc" class="btn ghost">+ Tambah service</button><p id="configError" class="config-error" role="alert"></p><div class="modal-actions"><button id="saveCfg" class="btn primary">Simpan perubahan</button><button id="resetCfg" class="btn ghost">Reset default</button><button id="closeCfg" class="btn ghost">Batal</button></div></div>
   </div>
-
+  <script src="state.js"></script>
+  <script src="workstations.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

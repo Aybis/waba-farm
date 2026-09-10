@@ -44,74 +44,65 @@ function rng(seed) {
   };
 }
 
-/* ---------- Agent roles & tasks (per service) ---------- */
-const TASKS = {
-  "IN": [
-    "Membaca pesan masuk & klasifikasi intent",
-    "Ekstrak entitas (nama, tanggal, jumlah)",
-    "Menjawab customer dengan template",
-    "Meneruskan ke CSO bila di luar scope",
-    "Update CRM & catat percakapan"
-  ],
-  "OUT": [
-    "Mengirim notifikasi / reminder ke customer",
-    "Broadcast promo tersegmentasi",
-    "Follow-up pembayaran / invoice",
-    "Konfirmasi jadwal & pengingat",
-    "Kirim OTP / verifikasi"
-  ]
-};
+/* ---------- Agent roles & tasks ---------- */
+const TASKS = [
+  "Membaca pesan masuk & klasifikasi intent",
+  "Ekstrak entitas (nama, tanggal, jumlah)",
+  "Menjawab customer dengan template",
+  "Meneruskan ke CSO bila di luar scope",
+  "Update CRM & catat percakapan",
+  "Mengirim notifikasi / reminder ke customer",
+  "Broadcast promo tersegmentasi",
+  "Follow-up pembayaran / invoice",
+  "Konfirmasi jadwal & pengingat",
+  "Kirim OTP / verifikasi"
+];
 const STATUSES = ["ACTIVE", "ACTIVE", "IDLE", "DONE"];
-const ROLES = ["Inbound Agent", "Outbound Agent"];
 
-function agentRole(dir) { return dir === "in" ? ROLES[0] : ROLES[1]; }
-
-function taskFor(seed, dir, r) {
-  const list = TASKS[dir.toUpperCase()];
-  return list[Math.floor(r() * list.length)];
+function taskFor(seed, r) {
+  return TASKS[Math.floor(r() * TASKS.length)];
 }
 
-/* ---------- Telemetry: satu baris = satu agent (service+number+dir) ---------- */
+/* ---------- Telemetry: satu baris = satu agent (service + number) ---------- */
 function fetchTelemetry() {
   tick++;
   const rows = [];
   for (const svc of config.services) {
     for (const num of svc.numbers) {
-      for (const dir of ["in", "out"]) {
-        const id = svc.name + "|" + num + "|" + dir;
-        const base = (hashStr(id) % 9000) + 200;
-        const jitter = (Math.sin(tick * 0.7 + (hashStr(num) % 7)) + 1) * 0.35 + 0.6;
-        const total = Math.max(1, Math.round(base * jitter));
+      const id = svc.name + "|" + num;
+      const base = (hashStr(id) % 18000) + 400;
+      const jitter = (Math.sin(tick * 0.7 + (hashStr(num) % 7)) + 1) * 0.35 + 0.6;
+      const total = Math.max(1, Math.round(base * jitter));
 
-        // error rate: kebanyakan sehat, beberapa agent error (1-3%), sesekali spike
-        const errBase = (hashStr(id + "|err") % 100) / 100;
-        let errRate = Math.min(0.25, Math.max(0.0005, errBase * 0.015));
-        if (errRate > 0.008 && (hashStr(num) % 5) === 0) {
-          errRate += Math.max(0, Math.sin(tick * 0.5 + (hashStr(num) % 13)) * 0.03);
-        }
-        const errors = Math.max(0, Math.round(total * errRate));
-        const success = total - errors;
-
-        const latencyBase = 0.4 + (hashStr(id + "|lat") % 200) / 100; // 0.4 - 2.4 s
-        const latency = +(latencyBase + (rng(hashStr(id) + tick)() - 0.5) * 0.3).toFixed(2);
-
-        // status: error -> ERROR, active jika ada traffic, else IDLE
-        const rnd = rng(hashStr(id) + tick * 7919);
-        let status;
-        if (errors > 0 && errRate > 0.05) status = "ERROR";
-        else if (rnd() < 0.55) status = "ACTIVE";
-        else if (rnd() < 0.8) status = "IDLE";
-        else status = "DONE";
-
-        rows.push({
-          id, service: svc.name, number: num, direction: dir,
-          role: agentRole(dir), status,
-          total, success, errors, errRate: errors / total,
-          latency,
-          task: status === "IDLE" ? null : taskFor(id, dir, rng(hashStr(id) + tick)),
-          lastError: errors > 0 ? `ERROR_${1000 + (hashStr(id + "|err") % 900)}: timeout menunggu respons Meta (HTTP 500)` : null
-        });
+      // error rate: kebanyakan sehat, beberapa agent error (1-3%), sesekali spike
+      const errBase = (hashStr(id + "|err") % 100) / 100;
+      let errRate = Math.min(0.25, Math.max(0.0005, errBase * 0.015));
+      if (errRate > 0.008 && (hashStr(num) % 5) === 0) {
+        errRate += Math.max(0, Math.sin(tick * 0.5 + (hashStr(num) % 13)) * 0.03);
       }
+      const errors = Math.max(0, Math.round(total * errRate));
+      const success = total - errors;
+
+      const latencyBase = 0.4 + (hashStr(id + "|lat") % 200) / 100; // 0.4 - 2.4 s
+      const latency = +(latencyBase + (rng(hashStr(id) + tick)() - 0.5) * 0.3).toFixed(2);
+
+      // status: error -> ERROR, active jika ada traffic, else IDLE
+      const rnd = rng(hashStr(id) + tick * 7919);
+      let status;
+      if (errors > 0 && errRate > 0.05) status = "ERROR";
+      else if (rnd() < 0.55) status = "ACTIVE";
+      else if (rnd() < 0.8) status = "IDLE";
+      else status = "DONE";
+
+      rows.push({
+        id, service: svc.name, number: num,
+        role: "Inbound + Outbound",
+        status,
+        total, success, errors, errRate: errors / total,
+        latency,
+        task: status === "IDLE" ? null : taskFor(id, rng(hashStr(id) + tick)),
+        lastError: errors > 0 ? `ERROR_${1000 + (hashStr(id + "|err") % 900)}: timeout menunggu respons Meta (HTTP 500)` : null
+      });
     }
   }
 
@@ -119,7 +110,7 @@ function fetchTelemetry() {
   // + bubble hewan panik selalu terlihat, seperti alert nyata.
   const total = rows.length;
   for (let k = 0; k < 3; k++) {
-    const idx = (tick * 3 + k * 7) % total;
+    const idx = (tick * 3 + k * 5) % total;
     const rr = rows[idx];
     rr.status = "ERROR";
     rr.errRate = 0.08 + (hashStr(rr.id + "|spike") % 60) / 1000; // 8-14%
@@ -206,7 +197,7 @@ function renderKPIs(rows) {
 
   document.getElementById("kpis").innerHTML = `
     <div class="kpi"><div class="label">Agent Aktif</div><div class="value">${active}<span style="font-size:14px;color:var(--text-dim)">/${rows.length}</span></div><div class="sub">${idle} idle · ${errAgents} error</div></div>
-    <div class="kpi"><div class="label">Total Pesan (siklus)</div><div class="value">${fmt(total)}</div><div class="sub">in + out</div></div>
+    <div class="kpi"><div class="label">Total Pesan (siklus)</div><div class="value">${fmt(total)}</div><div class="sub">${rows.length} nomor</div></div>
     <div class="kpi ok"><div class="label">Success Rate</div><div class="value">${(100 - rate * 100).toFixed(3)}%</div><div class="sub">${fmt(total - err)} sukses</div></div>
     <div class="kpi ${rate > 0.01 ? "err" : ""}"><div class="label">Error Rate</div><div class="value">${(rate * 100).toFixed(3)}%</div><div class="sub">${fmt(err)} error</div></div>
     <div class="kpi"><div class="label">Latency Rata-rata</div><div class="value">${avgLat}s</div><div class="sub">per sesi</div></div>
@@ -250,7 +241,7 @@ function renderAgentView(rows) {
         <div class="agent-avatar" style="background:${avatarGradient(r.number)}">🤖</div>
         <div class="agent-title">
           <h3>${r.number} — ${r.role}</h3>
-          <p>${r.service} · ${r.direction.toUpperCase()}</p>
+          <p>${r.service}</p>
         </div>
         <span class="status-chip ${r.status}">${r.status}</span>
       </div>
@@ -323,34 +314,25 @@ function drawSankey(canvas, svc, rows) {
     ctx.fillText(n, X.out, numY[i]);
   });
 
-  // left lanes
-  const inRows = svcRows.filter(r => r.direction === "in");
-  const outRows = svcRows.filter(r => r.direction === "out");
-  const inTot = inRows.reduce((s, r) => s + r.total, 0) || 1;
-  const outTot = outRows.reduce((s, r) => s + r.total, 0) || 1;
-  const lanes = [
-    { dir: "in", y: svcY - 42, vol: inTot, err: inRows.reduce((s, r) => s + r.errors, 0) },
-    { dir: "out", y: svcY + 12, vol: outTot, err: outRows.reduce((s, r) => s + r.errors, 0) }
-  ];
+  // left lanes: success / error -> service node
+  const svcTotal = svcRows.reduce((s, r) => s + r.total, 0) || 1;
+  const svcErr = svcRows.reduce((s, r) => s + r.errors, 0);
+  const lane = { y: svcY, vol: svcTotal, err: svcErr };
 
-  lanes.forEach(lane => {
-    const wOk = Math.max(4, (lane.vol - lane.err) / lane.vol * 46);
-    const wErr = Math.max(2, lane.err / lane.vol * 46);
-    const y = lane.y, startX = X.src + 110;
-    ribbon(ctx, X.src, y - wOk / 2, startX, y - wOk / 2, wOk, PALETTE.success);
-    ribbon(ctx, X.src, y + wOk / 2, startX, y + wOk / 2, wErr, PALETTE.error);
-    ctx.fillStyle = "#9b6bff";
-    ctx.beginPath(); ctx.arc(startX + 26, y, 10, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = "#fff"; ctx.font = "700 9px system-ui"; ctx.textAlign = "center";
-    ctx.fillText(lane.dir, startX + 26, y);
-    ribbon(ctx, startX + 36, y - 23, X.mid - nodeW / 2 - 20, svcY - 18, 46, PALETTE.agg);
-  });
+  const wOk = Math.max(4, (lane.vol - lane.err) / lane.vol * 46);
+  const wErr = Math.max(2, lane.err / lane.vol * 46);
+  const y = lane.y, startX = X.src + 110;
+  ribbon(ctx, X.src, y - wOk / 2, startX, y - wOk / 2, wOk, PALETTE.success);
+  ribbon(ctx, X.src, y + wOk / 2, startX, y + wOk / 2, wErr, PALETTE.error);
+  ctx.fillStyle = "#9b6bff";
+  ctx.beginPath(); ctx.arc(startX + 26, y, 10, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#fff"; ctx.font = "700 9px system-ui"; ctx.textAlign = "center";
+  ctx.fillText("all", startX + 26, y);
+  ribbon(ctx, startX + 36, y - 23, X.mid - nodeW / 2 - 20, svcY - 18, 46, PALETTE.agg);
 
   ctx.font = "500 11px system-ui"; ctx.textAlign = "left"; ctx.fillStyle = "#7d8ba1";
-  ctx.fillText("success", X.src + 8, lanes[0].y - 26);
-  ctx.fillText("error", X.src + 8, lanes[0].y + 26);
-  ctx.fillText("success", X.src + 8, lanes[1].y - 26);
-  ctx.fillText("error", X.src + 8, lanes[1].y + 26);
+  ctx.fillText("success", X.src + 8, y - 26);
+  ctx.fillText("error", X.src + 8, y + 26);
 
   const totalOut = svcRows.reduce((s, r) => s + r.total, 0) || 1;
   svcRows.forEach(r => {
@@ -493,7 +475,7 @@ function renderFarmView(rows) {
           <span class="pen-icon">${isError ? "🔥" : "🌾"}</span>
           <div class="pen-title">
             <h3>${r.number}</h3>
-            <p>${r.role} (${r.direction.toUpperCase()})</p>
+            <p>${r.role}</p>
           </div>
           <span class="status-chip ${r.status}">${r.status}</span>
         </div>

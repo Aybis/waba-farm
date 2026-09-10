@@ -124,6 +124,46 @@ body {
 .agent-foot { display: flex; justify-content: space-between; padding: 9px 15px; border-top: 1px solid var(--border); font-size: 10.5px; color: var(--text-dim); }
 .agent-foot .err-flag { color: var(--red); font-weight: 700; }
 
+/* ============================================================
+   AGENT VIEW = CHAT (inbound kiri / outbound kanan)
+   ============================================================ */
+.chat-room { margin: 18px 22px 0; }
+.chat-room-head {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 16px; background: var(--bg-deep);
+  border: 1px solid var(--border); border-radius: 12px 12px 0 0;
+}
+.chat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 14px;
+  padding: 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 12px 12px;
+}
+.chat-thread {
+  padding: 10px 14px 4px;
+  display: flex; flex-direction: column; gap: 6px;
+  background: var(--bg-deep);
+  flex: 1;
+  min-height: 170px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.cb { max-width: 78%; font-size: 11.5px; line-height: 1.35; }
+.cb .cb-msg { padding: 6px 9px; border-radius: 10px; }
+.cb .cb-time { font-size: 9px; color: var(--text-dim); margin-top: 2px; }
+.cb.in { align-self: flex-start; }
+.cb.in .cb-msg { background: #122a3d; border: 1px solid rgba(56,189,248,.4); color: #bce7ff; border-bottom-left-radius: 3px; }
+.cb.in .cb-time { text-align: left; }
+.cb.out { align-self: flex-end; }
+.cb.out .cb-msg { background: #1d2e1d; border: 1px solid rgba(46,160,67,.4); color: #c9f2d0; border-bottom-right-radius: 3px; }
+.cb.out .cb-time { text-align: right; }
+.cb.cb-err .cb-msg { background: #2a1420; border-color: var(--red); color: #ffc2cf; }
+.cb.cb-err .cb-time { color: var(--red); }
+
 /* ---------- FLOW VIEW ---------- */
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(560px, 1fr)); gap: 18px; padding: 18px 22px; }
 .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
@@ -403,6 +443,26 @@ td .chip-mini { font-size: 10.5px; font-weight: 800; padding: 3px 9px; border-ra
   animation: errPop .35s ease-out;
   text-align: center;
 }
+/* varian tipe error */
+.error-pop.pop-warn {
+  background: #2a2414; border-color: var(--amber); color: #ffe0ae;
+}
+.error-pop.pop-warn::after {
+  background: #2a2414; border-color: var(--amber) transparent transparent var(--amber);
+}
+.error-pop.pop-server {
+  background: #241430; border-color: #b48bff; color: #e2ccff;
+}
+.error-pop.pop-server::after {
+  background: #241430; border-color: #b48bff transparent transparent #b48bff;
+}
+.error-pop.pop-error { background: #2a1420; border-color: var(--red); color: #ffc2cf; }
+.error-pop.pop-error::after {
+  background: #2a1420; border-color: var(--red) transparent transparent var(--red);
+}
+.error-pop.pop-warn .b-title { color: var(--amber); }
+.error-pop.pop-server .b-title { color: #c9a8ff; }
+.error-pop.pop-error .b-title { color: #ff8095; }
 @keyframes errPop { from { opacity: 0; transform: translateX(-50%) scale(.6); } to { opacity: 1; transform: translateX(-50%) scale(1); } }
 .error-pop .b-title { font-weight: 800; color: #ff8095; font-size: 9px; letter-spacing: .05em; margin-bottom: 2px; }
 /* panah bubble error — tetap menunjuk ke hewan */
@@ -411,6 +471,19 @@ td .chip-mini { font-size: 10.5px; font-weight: 800; padding: 3px 9px; border-ra
   width: 10px; height: 10px; background: #2a1420;
   border-right: 1px solid var(--red); border-bottom: 1px solid var(--red);
 }
+/* health dot di pojok hewan — hijau/kuning/merah/ungu */
+.health-dot {
+  position: absolute;
+  top: 6px; right: -8px;
+  width: 11px; height: 11px; border-radius: 50%;
+  border: 2px solid var(--bg-card);
+  z-index: 11;
+}
+.health-dot.ok { background: var(--green); box-shadow: 0 0 8px var(--green); }
+.health-dot.warn { background: var(--amber); box-shadow: 0 0 8px var(--amber); }
+.health-dot.err { background: var(--red); box-shadow: 0 0 8px var(--red); }
+.health-dot.server { background: #b48bff; box-shadow: 0 0 8px #b48bff; }
+
 .bubbles-hidden .chat-in, .bubbles-hidden .chat-out, .bubbles-hidden .error-pop,
 .bubbles-hidden .animal-bubble { display: none !important; }
 

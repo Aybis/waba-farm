@@ -63,6 +63,29 @@ function taskFor(seed, r) {
   return TASKS[Math.floor(r() * TASKS.length)];
 }
 
+/* ---------- Profil kesehatan per nomor (STABIL, bukan acak tiap detik) ----------
+   OK     = sukses terus (hijau)
+   WARN   = warning kuning  -> error INBOUND
+   ERROR  = error merah     -> error OUTBOUND
+   SERVER = error di server (webhook/meta tidak merespon)
+-------------------------------------------------------------------------- */
+function healthProfile(id, idx) {
+  // 1 nomor SERVER per service (deterministik: nomor ke-4), sisanya tersebar
+  if (idx === 3) return "SERVER";
+  const h = hashStr(id);
+  if (h % 23 === 5) return "SERVER";
+  const r = h % 10;
+  if (r < 5) return "OK";
+  if (r < 8) return "WARN";
+  return "ERROR";
+}
+function errMessage(health, id) {
+  const code = 1000 + (hashStr(id + "|err") % 900);
+  if (health === "WARN")   return `WARN_IN_${code}: pesan MASUK gagal diproses (intent timeout)`;
+  if (health === "SERVER") return `SERVER_${code}: Meta server tidak merespon — cek webhook`;
+  return `ERROR_OUT_${code}: pesan KELUAR gagal terkirim (Meta API HTTP 500)`;
+}
+
 /* ---------- Telemetry: satu baris = satu agent (service + number) ---------- */
 function fetchTelemetry() {
   tick++;
@@ -70,56 +93,48 @@ function fetchTelemetry() {
   for (const svc of config.services) {
     for (const num of svc.numbers) {
       const id = svc.name + "|" + num;
+      const health = healthProfile(id, svc.numbers.indexOf(num));
+
       const base = (hashStr(id) % 18000) + 400;
-      const jitter = (Math.sin(tick * 0.7 + (hashStr(num) % 7)) + 1) * 0.35 + 0.6;
+      const jitter = (Math.sin(tick * 0.3 + (hashStr(num) % 7)) + 1) * 0.25 + 0.75;
       const total = Math.max(1, Math.round(base * jitter));
 
-      // error rate: kebanyakan sehat, beberapa agent error (1-3%), sesekali spike
-      const errBase = (hashStr(id + "|err") % 100) / 100;
-      let errRate = Math.min(0.25, Math.max(0.0005, errBase * 0.015));
-      if (errRate > 0.008 && (hashStr(num) % 5) === 0) {
-        errRate += Math.max(0, Math.sin(tick * 0.5 + (hashStr(num) % 13)) * 0.03);
-      }
-      const errors = Math.max(0, Math.round(total * errRate));
+      // error rate stabil sesuai profil nomor
+      let errRate;
+      if (health === "SERVER")     errRate = 0.25 + (hashStr(id + "|s") % 30) / 1000;
+      else if (health === "ERROR") errRate = 0.08 + (hashStr(id + "|e") % 50) / 1000;
+      else if (health === "WARN")  errRate = 0.02 + (hashStr(id + "|w") % 20) / 1000;
+      else                         errRate = (hashStr(id + "|o") % 3) / 10000;
+      const errors = health === "OK" ? 0 : Math.max(1, Math.round(total * errRate));
       const success = total - errors;
 
-      const latencyBase = 0.4 + (hashStr(id + "|lat") % 200) / 100; // 0.4 - 2.4 s
+      const latencyBase = 0.4 + (hashStr(id + "|lat") % 200) / 100;
       const latency = +(latencyBase + (rng(hashStr(id) + tick)() - 0.5) * 0.3).toFixed(2);
 
-      // status: error -> ERROR, active jika ada traffic, else IDLE
+      // aktivitas hewan (makan / tidur / panik) — hanya pewarnaan health yang penting
       const rnd = rng(hashStr(id) + tick * 7919);
       let status;
-      if (errors > 0 && errRate > 0.05) status = "ERROR";
-      else if (rnd() < 0.55) status = "ACTIVE";
-      else if (rnd() < 0.8) status = "IDLE";
-      else status = "DONE";
+      if (health === "OK") {
+        const r2 = rnd();
+        status = r2 < 0.6 ? "ACTIVE" : r2 < 0.85 ? "IDLE" : "DONE";
+      } else if (health === "WARN") {
+        status = rnd() < 0.5 ? "ACTIVE" : "IDLE";
+      } else {
+        status = "ERROR";
+      }
 
       rows.push({
         id, service: svc.name, number: num,
         role: "Inbound + Outbound",
-        status,
+        health, status,
         total, success, errors, errRate: errors / total,
         latency,
+        errType: health === "SERVER" ? "SERVER" : health === "WARN" ? "INBOUND" : health === "ERROR" ? "OUTBOUND" : null,
         task: status === "IDLE" ? null : taskFor(id, rng(hashStr(id) + tick)),
-        lastError: errors > 0 ? `ERROR_${1000 + (hashStr(id + "|err") % 900)}: timeout menunggu respons Meta (HTTP 500)` : null
+        lastError: health !== "OK" ? errMessage(health, id) : null
       });
     }
   }
-
-  // Pastikan ada 3 agent ERROR tiap siklus (bergilir) — biar kandang merah
-  // + bubble hewan panik selalu terlihat, seperti alert nyata.
-  const total = rows.length;
-  for (let k = 0; k < 3; k++) {
-    const idx = (tick * 3 + k * 5) % total;
-    const rr = rows[idx];
-    rr.status = "ERROR";
-    rr.errRate = 0.08 + (hashStr(rr.id + "|spike") % 60) / 1000; // 8-14%
-    rr.errors = Math.max(3, Math.round(rr.total * rr.errRate));
-    rr.success = rr.total - rr.errors;
-    rr.lastError = `ERROR_${1000 + (hashStr(rr.id + "|err") % 900)}: timeout menunggu respons Meta (HTTP 500)`;
-    rr.task = "Mencoba kirim ulang pesan gagal… (retry)";
-  }
-
   return rows;
 }
 
@@ -190,13 +205,14 @@ function renderKPIs(rows) {
   const total = rows.reduce((s, r) => s + r.total, 0);
   const err = rows.reduce((s, r) => s + r.errors, 0);
   const rate = total ? err / total : 0;
-  const active = rows.filter(r => r.status === "ACTIVE").length;
-  const idle = rows.filter(r => r.status === "IDLE").length;
-  const errAgents = rows.filter(r => r.status === "ERROR").length;
+  const ok = rows.filter(r => r.health === "OK").length;
+  const warn = rows.filter(r => r.health === "WARN").length;
+  const errOut = rows.filter(r => r.health === "ERROR").length;
+  const server = rows.filter(r => r.health === "SERVER").length;
   const avgLat = (rows.reduce((s, r) => s + r.latency, 0) / rows.length).toFixed(2);
 
   document.getElementById("kpis").innerHTML = `
-    <div class="kpi"><div class="label">Agent Aktif</div><div class="value">${active}<span style="font-size:14px;color:var(--text-dim)">/${rows.length}</span></div><div class="sub">${idle} idle · ${errAgents} error</div></div>
+    <div class="kpi"><div class="label">Status Nomor</div><div class="value">${ok}<span style="font-size:14px;color:var(--green)">✓</span> · ${warn}<span style="font-size:14px;color:var(--amber)">⚠</span> · ${errOut}<span style="font-size:14px;color:var(--red)">✕</span> · ${server}<span style="font-size:14px;color:#b48bff">🖥</span></div><div class="sub">hijau=sehat · kuning=IN error · merah=OUT error · ungu=server</div></div>
     <div class="kpi"><div class="label">Total Pesan (siklus)</div><div class="value">${fmt(total)}</div><div class="sub">${rows.length} nomor</div></div>
     <div class="kpi ok"><div class="label">Success Rate</div><div class="value">${(100 - rate * 100).toFixed(3)}%</div><div class="sub">${fmt(total - err)} sukses</div></div>
     <div class="kpi ${rate > 0.01 ? "err" : ""}"><div class="label">Error Rate</div><div class="value">${(rate * 100).toFixed(3)}%</div><div class="sub">${fmt(err)} error</div></div>
@@ -211,11 +227,17 @@ function renderTable(rows) {
     const tr = document.createElement("tr");
     tr.style.cursor = "pointer";
     tr.addEventListener("click", () => openAgentModal(r));
+    const healthBadge = {
+      OK: `<span class="chip-mini" style="background:rgba(31,164,90,.16);color:var(--green)">✓ SEHAT</span>`,
+      WARN: `<span class="chip-mini" style="background:rgba(232,163,61,.15);color:var(--amber)">⚠ INBOUND</span>`,
+      ERROR: `<span class="chip-mini" style="background:rgba(211,61,92,.16);color:var(--red)">✕ OUTBOUND</span>`,
+      SERVER: `<span class="chip-mini" style="background:rgba(180,139,255,.16);color:#c9a8ff">🖥 SERVER</span>`
+    }[r.health];
     tr.innerHTML = `
       <td style="font-size:18px">${animalFor(r.id)}</td>
       <td><b style="color:${numColor(r.number)}">${r.number}</b></td>
       <td>${r.service}</td>
-      <td><span class="chip-mini ${r.status}">${r.status}</span></td>
+      <td>${healthBadge}</td>
       <td class="num">${fmt(r.total)}</td>
       <td class="num">${fmt(r.success)}</td>
       <td class="num">${fmt(r.errors)} <span class="pct">(${(r.errRate * 100).toFixed(2)}%)</span></td>
@@ -226,48 +248,89 @@ function renderTable(rows) {
 }
 
 /* ============================================================
-   AGENT VIEW (kartu per agent)
+   AGENT VIEW — chat antara INBOUND (kiri) & OUTBOUND (kanan)
    ============================================================ */
+const IN_MSGS = [
+  "halo, cek order?", "butuh bantuan", "mau tanya produk",
+  "gimana caranya?", "pesanan saya mana?", "bisa kirim hari ini?",
+  "terima kasih!", "berapa harganya?"
+];
+const OUT_MSGS = [
+  "selamat datang!", "order kamu diproses ✅", "ini info promonya 🎉",
+  "OTP kamu: 482913", "reminder besok ya!", "pesanan sudah dikirim 🚚",
+  "sama-sama 😊", "harganya 250rb, ada diskon lho!"
+];
+
 function renderAgentView(rows) {
   const grid = document.getElementById("agentView");
   grid.innerHTML = "";
-  for (const r of rows) {
-    const evs = eventsFor(r);
-    const card = document.createElement("div");
-    card.className = `agent-card status-${r.status.toLowerCase()}`;
-    card.addEventListener("click", () => openAgentModal(r));
-    card.innerHTML = `
-      <div class="agent-head">
-        <div class="agent-avatar" style="background:${avatarGradient(r.number)}">🤖</div>
-        <div class="agent-title">
-          <h3>${r.number} — ${r.role}</h3>
-          <p>${r.service}</p>
-        </div>
-        <span class="status-chip ${r.status}">${r.status}</span>
+
+  for (const svc of config.services) {
+    const svcRows = rows.filter(r => r.service === svc.name);
+    if (!svcRows.length) continue;
+
+    // satu "room" chat per service
+    const room = document.createElement("div");
+    room.className = "chat-room";
+    room.innerHTML = `
+      <div class="chat-room-head">
+        <span class="barn-icon">💬</span>
+        <div class="barn-title"><h2>${svc.name}</h2><p>Percakapan inbound ↔ outbound</p></div>
       </div>
-      <div class="agent-body">
-        <div class="current-task">
-          <div class="task-label">${r.status === "IDLE" ? "Status" : "Sedang dikerjakan"}</div>
-          <div class="task-text ${r.status === "IDLE" ? "idle" : ""}">${r.task || "Menunggu tugas baru…"}</div>
-        </div>
-        <div class="agent-stats">
-          <div class="stat"><div class="v">${fmt(r.total)}</div><div class="l">Pesan</div></div>
-          <div class="stat"><div class="v green">${(100 - r.errRate * 100).toFixed(2)}%</div><div class="l">Sukses</div></div>
-          <div class="stat"><div class="v ${r.errors > 0 ? "red" : ""}">${fmt(r.errors)}</div><div class="l">Error</div></div>
-          <div class="stat"><div class="v">${r.latency}s</div><div class="l">Latency</div></div>
-        </div>
-        <div class="agent-events">
-          <div class="events-label">Live log</div>
-          ${evs.map(e => `<div class="ev ${e.k}"><span class="t">${e.t}</span><span class="m">${e.m}</span></div>`).join("")}
-        </div>
-      </div>
-      <div class="agent-foot">
-        <span>👀 klik untuk detail session</span>
-        <span class="err-flag">${r.errors > 0 ? "⚠ " + r.errors + " error" : "✓ sehat"}</span>
-      </div>
+      <div class="chat-grid"></div>
     `;
-    grid.appendChild(card);
+    grid.appendChild(room);
+    const chatGrid = room.querySelector(".chat-grid");
+
+    for (const r of svcRows) {
+      const rnd = rng(hashStr(r.id) + tick * 7);
+      const nIn = 2 + Math.floor(rnd() * 3);
+      const nOut = 2 + Math.floor(rnd() * 3);
+
+      const inBubbles = [];
+      for (let i = 0; i < nIn; i++) {
+        const err = (r.errType === "INBOUND" || r.errType === "SERVER") && i === nIn - 1;
+        inBubbles.push(chatBubble("in", err ? "❌ pesan masuk gagal diproses" : IN_MSGS[Math.floor(rnd() * IN_MSGS.length)], err));
+      }
+      const outBubbles = [];
+      for (let i = 0; i < nOut; i++) {
+        const err = r.errType === "OUTBOUND" && i === nOut - 1;
+        outBubbles.push(chatBubble("out", err ? "❌ pesan keluar gagal terkirim" : OUT_MSGS[Math.floor(rnd() * OUT_MSGS.length)], err));
+      }
+
+      const card = document.createElement("div");
+      card.className = `agent-card status-${r.status.toLowerCase()}`;
+      card.addEventListener("click", () => openAgentModal(r));
+      card.innerHTML = `
+        <div class="agent-head">
+          <div class="agent-avatar" style="background:${avatarGradient(r.number)}">${animalFor(r.id)}</div>
+          <div class="agent-title">
+            <h3>${r.number}</h3>
+            <p>${r.service}</p>
+          </div>
+          <span class="status-chip ${r.status}">${r.status}</span>
+        </div>
+        <div class="chat-thread">
+          ${inBubbles.join("")}
+          ${outBubbles.join("")}
+        </div>
+        <div class="agent-foot">
+          <span>${fmt(r.total)} pesan · ${(100 - r.errRate * 100).toFixed(1)}% sukses · ${r.latency}s</span>
+          <span class="err-flag">${r.errors > 0 ? "⚠ " + fmt(r.errors) + " error" : "✓ sehat"}</span>
+        </div>
+      `;
+      chatGrid.appendChild(card);
+    }
   }
+}
+
+function chatBubble(side, text, isErr) {
+  const time = new Date(Date.now() - Math.floor(Math.random() * 30000)).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+  return `
+    <div class="cb ${side} ${isErr ? "cb-err" : ""}">
+      <div class="cb-msg">${text}</div>
+      <div class="cb-time">${side === "in" ? "IN" : "OUT"} · ${time}</div>
+    </div>`;
 }
 
 /* ============================================================
@@ -444,60 +507,53 @@ function renderFarmView(rows) {
 
     for (const r of svcRows) {
       const animal = animalFor(r.id);
-      const isError = r.status === "ERROR";
+      const health = r.health;
+      const isError = health === "ERROR" || health === "SERVER";
+      const isWarn = health === "WARN";
       const isIdle = r.status === "IDLE";
       const isActive = r.status === "ACTIVE";
 
       const actionClass = isError ? "zombie" : isIdle ? "sleeping" : "eating";
 
-      // pesan singkat untuk bubble chat kiri (inbound) & kanan (outbound)
-      const msgIn = isError
-        ? "❌ masuk gagal…"
-        : isIdle
-          ? "menunggu pesan…"
-          : ["halo, cek order?", "butuh bantuan", "mau tanya produk", "gimana caranya?", "pesanan saya mana?"][hashStr(r.id + "|inmsg") % 5];
-      const msgOut = isError
-        ? "❌ keluar gagal…"
-        : isIdle
-          ? "tidak ada kiriman"
-          : ["selamat datang!", "order kamu diproses ✅", "ini info promonya 🎉", "OTP kamu: 482913", "reminder besok ya!"][hashStr(r.id + "|outmsg") % 5];
-
-      // bubble error (muncul dari hewan, bisa di-show/hide via tombol Bubble)
+      // bubble error muncul HANYA saat ada masalah, warna sesuai tipe:
+      // kuning = error INBOUND, merah = error OUTBOUND, ungu = error SERVER
       let errPop = "";
-      if (isError) {
+      if (health !== "OK") {
+        const tone = health === "WARN"
+          ? "pop-warn"
+          : health === "SERVER"
+            ? "pop-server"
+            : "pop-error";
+        const title = health === "WARN" ? "⚠ INBOUND" : health === "SERVER" ? "🖥 SERVER" : "❌ OUTBOUND";
         errPop = `
-          <div class="error-pop">
-            <div class="b-title">🐾 ${animal} LAPORAN</div>
-            ${r.lastError || "Ada yang salah!"}<br/>
-            ❌ ${r.errors} pesan gagal (${(r.errRate * 100).toFixed(2)}%)
-          </div>`;
-      } else if (r.errRate > 0.01) {
-        errPop = `
-          <div class="error-pop" style="border-color:var(--amber);background:#2a2414;color:#ffe0ae">
-            <div class="b-title" style="color:var(--amber)">🐾 ${animal} CATATAN</div>
-            ⚠ ${r.errors} error kecil — sudah diretry
+          <div class="error-pop ${tone}">
+            <div class="b-title">${title}</div>
+            ${r.lastError || "Ada masalah"}<br/>
+            ${r.errors} pesan gagal (${(r.errRate * 100).toFixed(2)}%)
           </div>`;
       }
 
       const zzz = isIdle ? `<div class="zztag">z Z z</div>` : "";
+      const healthDot = health === "OK" ? `<span class="health-dot ok"></span>`
+        : health === "WARN" ? `<span class="health-dot warn"></span>`
+        : health === "ERROR" ? `<span class="health-dot err"></span>`
+        : `<span class="health-dot server"></span>`;
 
       const slot = document.createElement("div");
-      slot.className = `herd-slot status-${r.status.toLowerCase()}`;
+      slot.className = `herd-slot health-${health.toLowerCase()}`;
       slot.addEventListener("click", () => openAgentModal(r));
       slot.innerHTML = `
-        <span class="animal-status ${r.status}">${r.status}</span>
-        ${zzz}
         ${errPop}
-        <div class="chat-in"><span class="ci">IN</span>${msgIn}</div>
-        <div class="chat-out"><span class="ci">OUT</span>${msgOut}</div>
         <div class="animal ${actionClass}">${animal}</div>
         <span class="animal-tag">${r.number}</span>
+        ${healthDot}
         <div class="slot-stats">
           <span class="ss">${fmt(r.total)}</span>
           <span class="ss green">${(100 - r.errRate * 100).toFixed(1)}%</span>
-          <span class="ss ${r.errors > 0 ? "red" : ""}">${fmt(r.errors)}✕</span>
+          <span class="ss ${r.errors > 0 ? "red" : ""}">${r.errors}✕</span>
           <span class="ss">${r.latency}s</span>
         </div>
+        ${zzz}
       `;
       herd.appendChild(slot);
     }
@@ -651,7 +707,7 @@ bubbleBtn.addEventListener("click", () => {
   document.getElementById("farmView").classList.toggle("bubbles-hidden", !show);
 });
 document.getElementById("refreshBtn").addEventListener("click", render);
-setInterval(() => { if (live) render(); }, 5000);
+setInterval(() => { if (live) render(); }, 15000);
 
 /* ---------- Main ---------- */
 function render() {

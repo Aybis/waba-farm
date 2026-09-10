@@ -405,7 +405,7 @@ function renderFarmView(rows) {
   const grid = document.getElementById("farmView");
   grid.innerHTML = "";
 
-  // Kamar besar per service, kandang di dalamnya
+  // Kamar besar per service — hewan langsung di dalamnya (1 hewan = 1 nomor)
   for (const svc of config.services) {
     const svcRows = rows.filter(r => r.service === svc.name);
     if (!svcRows.length) continue;
@@ -424,7 +424,7 @@ function renderFarmView(rows) {
         <span class="barn-icon">🏠</span>
         <div class="barn-title">
           <h2>${svc.name}</h2>
-          <p>WABA ${svc.name} · ${svc.numbers.length} nomor</p>
+          <p>WABA ${svc.name} · ${svc.numbers.length} hewan</p>
         </div>
         <div class="barn-stats">
           <div class="bstat"><div class="v">${fmt(svcTotal)}</div><div class="l">Pesan</div></div>
@@ -432,10 +432,15 @@ function renderFarmView(rows) {
           <div class="bstat"><div class="v ${svcErr ? "red" : ""}">${fmt(svcErr)}</div><div class="l">Error</div></div>
         </div>
       </div>
-      <div class="pen-grid"></div>
+      <div class="pasture">
+        <div class="fence"></div>
+        <div class="grass"></div>
+        <div class="ground"></div>
+        <div class="herd"></div>
+      </div>
     `;
     grid.appendChild(barn);
-    const penGrid = barn.querySelector(".pen-grid");
+    const herd = barn.querySelector(".herd");
 
     for (const r of svcRows) {
       const animal = animalFor(r.id);
@@ -444,63 +449,57 @@ function renderFarmView(rows) {
       const isActive = r.status === "ACTIVE";
 
       const actionClass = isError ? "zombie" : isIdle ? "sleeping" : "eating";
-      const eatPct = Math.min(100, Math.round(r.total / 12000 * 100));
 
-      let bubble = "";
+      // pesan singkat untuk bubble chat kiri (inbound) & kanan (outbound)
+      const msgIn = isError
+        ? "❌ masuk gagal…"
+        : isIdle
+          ? "menunggu pesan…"
+          : ["halo, cek order?", "butuh bantuan", "mau tanya produk", "gimana caranya?", "pesanan saya mana?"][hashStr(r.id + "|inmsg") % 5];
+      const msgOut = isError
+        ? "❌ keluar gagal…"
+        : isIdle
+          ? "tidak ada kiriman"
+          : ["selamat datang!", "order kamu diproses ✅", "ini info promonya 🎉", "OTP kamu: 482913", "reminder besok ya!"][hashStr(r.id + "|outmsg") % 5];
+
+      // bubble error (muncul dari hewan, bisa di-show/hide via tombol Bubble)
+      let errPop = "";
       if (isError) {
-        bubble = `
-          <div class="animal-bubble">
-            <div class="b-title">🐾 LAPORAN ${animal}</div>
-            "${r.lastError || "Ada yang salah di kandang!"}"<br/>
-            <span style="color:#ff8095">❌ ${r.errors} pesan gagal (${(r.errRate * 100).toFixed(2)}%)</span>
+        errPop = `
+          <div class="error-pop">
+            <div class="b-title">🐾 ${animal} LAPORAN</div>
+            ${r.lastError || "Ada yang salah!"}<br/>
+            ❌ ${r.errors} pesan gagal (${(r.errRate * 100).toFixed(2)}%)
           </div>`;
       } else if (r.errRate > 0.01) {
-        bubble = `
-          <div class="animal-bubble warn">
-            <div class="b-title">🐾 CATATAN ${animal}</div>
-            ⚠ ${r.errors} error kecil — sudah diretry, aman
+        errPop = `
+          <div class="error-pop" style="border-color:var(--amber);background:#2a2414;color:#ffe0ae">
+            <div class="b-title" style="color:var(--amber)">🐾 ${animal} CATATAN</div>
+            ⚠ ${r.errors} error kecil — sudah diretry
           </div>`;
       }
 
-      const zzz = isIdle ? `<div class="zzz">z Z z</div>` : "";
-      const crumbs = isActive
-        ? `<span class="crumb" style="bottom:66px;left:38%">🌿</span><span class="crumb" style="bottom:74px;left:58%;animation-delay:.5s">🍃</span><span class="crumb" style="bottom:62px;left:50%;animation-delay:1s">🌱</span>`
-        : "";
+      const zzz = isIdle ? `<div class="zztag">z Z z</div>` : "";
 
-      const pen = document.createElement("div");
-      pen.className = `pen status-${r.status.toLowerCase()}`;
-      pen.addEventListener("click", () => openAgentModal(r));
-      pen.innerHTML = `
-        <div class="pen-head">
-          <span class="pen-icon">${isError ? "🔥" : "🌾"}</span>
-          <div class="pen-title">
-            <h3>${r.number}</h3>
-            <p>${r.role}</p>
-          </div>
-          <span class="status-chip ${r.status}">${r.status}</span>
-        </div>
-        <div class="pen-scene">
-          ${bubble}
-          <div class="fence"></div>
-          <div class="grass"></div>
-          <div class="ground"></div>
-          ${zzz}
-          ${crumbs}
-          <div class="animal ${actionClass}">${animal}</div>
-          <div class="eat-bar"><div class="fill" style="width:${isIdle ? "4" : eatPct}%"></div></div>
-        </div>
-        <div class="pen-stats">
-          <div class="stat"><div class="v">${fmt(r.total)}</div><div class="l">Pesan</div></div>
-          <div class="stat"><div class="v green">${(100 - r.errRate * 100).toFixed(2)}%</div><div class="l">Sukses</div></div>
-          <div class="stat"><div class="v ${r.errors > 0 ? "red" : ""}">${fmt(r.errors)}</div><div class="l">Error</div></div>
-          <div class="stat"><div class="v">${r.latency}s</div><div class="l">Latency</div></div>
-        </div>
-        <div class="pen-foot">
-          <span>${isError ? `🔥 ${animal} panik! Klik untuk detail` : isIdle ? `💤 ${animal} lagi tidur (idle)` : `🌿 ${animal} lagi makan — ${r.task}`}</span>
-          <span class="err-flag">${r.errors > 0 ? "⚠ " + r.errors + " error" : "✓ sehat"}</span>
+      const slot = document.createElement("div");
+      slot.className = `herd-slot status-${r.status.toLowerCase()}`;
+      slot.addEventListener("click", () => openAgentModal(r));
+      slot.innerHTML = `
+        <span class="animal-status ${r.status}">${r.status}</span>
+        ${zzz}
+        ${errPop}
+        <div class="chat-in"><span class="ci">IN</span>${msgIn}</div>
+        <div class="chat-out"><span class="ci">OUT</span>${msgOut}</div>
+        <div class="animal ${actionClass}">${animal}</div>
+        <span class="animal-tag">${r.number}</span>
+        <div class="slot-stats">
+          <span class="ss">${fmt(r.total)}</span>
+          <span class="ss green">${(100 - r.errRate * 100).toFixed(1)}%</span>
+          <span class="ss ${r.errors > 0 ? "red" : ""}">${fmt(r.errors)}✕</span>
+          <span class="ss">${r.latency}s</span>
         </div>
       `;
-      penGrid.appendChild(pen);
+      herd.appendChild(slot);
     }
   }
 }
@@ -642,6 +641,14 @@ document.getElementById("liveBtn").addEventListener("click", () => {
   live = !live;
   document.getElementById("liveBtn").classList.toggle("active", live);
   document.getElementById("liveBtn").textContent = live ? "⏸ Pause" : "▶ Live";
+});
+
+/* Toggle bubble error & chat (show/hide) */
+const bubbleBtn = document.getElementById("bubbleBtn");
+bubbleBtn.addEventListener("click", () => {
+  const show = bubbleBtn.classList.toggle("active");
+  bubbleBtn.textContent = show ? "💬 Bubble" : "💬 Bubble Off";
+  document.getElementById("farmView").classList.toggle("bubbles-hidden", !show);
 });
 document.getElementById("refreshBtn").addEventListener("click", render);
 setInterval(() => { if (live) render(); }, 5000);

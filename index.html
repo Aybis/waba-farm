@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WABA Farm — Peternakan AI Agent</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">W</div>
+      <div>
+        <h1>WABA Farm</h1>
+        <p>Setiap nomor WABA = satu hewan AI · makan = lagi kerja · error = notif dari hewan</p>
+      </div>
+    </div>
+    <div class="controls">
+      <div class="view-switch">
+        <button id="viewFarm" class="vs-btn active">🌾 Farm View</button>
+        <button id="viewAgents" class="vs-btn">🤖 Agent View</button>
+        <button id="viewFlow" class="vs-btn">📊 Flow View</button>
+      </div>
+      <span id="updated" class="updated">—</span>
+      <button id="liveBtn" class="btn active">⏸ Pause</button>
+      <button id="refreshBtn" class="btn ghost">↻ Refresh</button>
+      <button id="settingsBtn" class="btn ghost">⚙ Nomor &amp; Service</button>
+    </div>
+  </header>
+
+  <section class="kpis" id="kpis"></section>
+
+  <!-- ===== FARM VIEW (default) ===== -->
+  <main id="farmView" class="farm-grid"></main>
+
+  <!-- ===== AGENT VIEW ===== -->
+  <main id="agentView" class="agent-grid hidden"></main>
+
+  <!-- ===== FLOW VIEW ===== -->
+  <main id="flowView" class="cards hidden"></main>
+
+  <section class="table-section">
+    <h2>Status Semua Hewan (Agent)</h2>
+    <table id="numTable">
+      <thead>
+        <tr>
+          <th>Hewan</th><th>Nomor</th><th>Service</th><th>Status</th>
+          <th class="num">Pesan</th><th class="num">Sukses</th><th class="num">Error</th>
+          <th class="num">Latency</th>
+        </tr>
+      </thead>
+      <tbody id="numBody"></tbody>
+    </table>
+  </section>
+
+  <div id="tooltip" class="tooltip hidden"></div>
+
+  <!-- ===== AGENT DETAIL MODAL ===== -->
+  <div id="agentModal" class="modal hidden">
+    <div class="modal-card wide">
+      <div class="modal-head">
+        <h2 id="amTitle">Agent Detail</h2>
+        <button id="amClose" class="btn ghost">✕ Tutup</button>
+      </div>
+      <div id="amStats" class="am-stats"></div>
+      <h3>Session Terakhir — Waterfall</h3>
+      <div id="amSpans" class="spans"></div>
+      <h3>Event Log</h3>
+      <div id="amEvents" class="events full"></div>
+    </div>
+  </div>
+
+  <!-- ===== SETTINGS MODAL ===== -->
+  <div id="settingsModal" class="modal hidden">
+    <div class="modal-card">
+      <h2>Konfigurasi Service &amp; Nomor</h2>
+      <p class="muted">Nomor dipisah koma. Setiap nomor = satu kandang + satu hewan.</p>
+      <div id="svcForms"></div>
+      <button id="addSvc" class="btn ghost">+ Tambah Service</button>
+      <div class="modal-actions">
+        <button id="saveCfg" class="btn">💾 Simpan</button>
+        <button id="resetCfg" class="btn ghost">Reset Default</button>
+        <button id="closeCfg" class="btn ghost">Batal</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -31,6 +31,19 @@ npx serve
 
 Lalu buka `http://localhost:8899/index.html`
 
+### Deploy ke Vercel (gratis)
+
+Static site tanpa build step — tinggal import repo ini di Vercel:
+
+| Setting | Nilai |
+|---|---|
+| Framework Preset | `Other` |
+| Root Directory | `./` |
+| Build Command | _(kosongkan)_ |
+| Output Directory | _(kosongkan)_ |
+
+Setelah deploy, akses lewat URL `https://<nama-project>.vercel.app`.
+
 ## 🛠️ Teknologi
 
 - **Vanilla HTML + CSS + JavaScript** — tanpa dependency, tanpa build step

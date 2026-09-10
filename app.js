@@ -422,70 +422,104 @@ function animalFor(seedStr) { return ANIMALS[hashStr(seedStr) % ANIMALS.length];
 function renderFarmView(rows) {
   const grid = document.getElementById("farmView");
   grid.innerHTML = "";
-  for (const r of rows) {
-    const animal = animalFor(r.id);
-    const isError = r.status === "ERROR";
-    const isIdle = r.status === "IDLE";
-    const isActive = r.status === "ACTIVE";
 
-    const actionClass = isError ? "zombie" : isIdle ? "sleeping" : "eating";
-    const eatPct = Math.min(100, Math.round(r.total / 12000 * 100));
+  // Kamar besar per service, kandang di dalamnya
+  for (const svc of config.services) {
+    const svcRows = rows.filter(r => r.service === svc.name);
+    if (!svcRows.length) continue;
 
-    let bubble = "";
-    if (isError) {
-      bubble = `
-        <div class="animal-bubble">
-          <div class="b-title">🐾 LAPORAN ${animal}</div>
-          "${r.lastError || "Ada yang salah di kandang!"}"<br/>
-          <span style="color:#ff8095">❌ ${r.errors} pesan gagal (${(r.errRate * 100).toFixed(2)}%)</span>
-        </div>`;
-    } else if (r.errRate > 0.01) {
-      bubble = `
-        <div class="animal-bubble warn">
-          <div class="b-title">🐾 CATATAN ${animal}</div>
-          ⚠ ${r.errors} error kecil — sudah diretry, aman
-        </div>`;
-    }
+    const barn = document.createElement("div");
+    const svcErrRate = svcRows.reduce((s, r) => s + r.errors, 0) /
+                       Math.max(1, svcRows.reduce((s, r) => s + r.total, 0));
+    const svcHasError = svcRows.some(r => r.status === "ERROR");
+    barn.className = "barn" + (svcHasError ? " barn-err" : svcErrRate > 0.01 ? " barn-warn" : "");
 
-    const zzz = isIdle ? `<div class="zzz">z Z z</div>` : "";
-    const crumbs = isActive
-      ? `<span class="crumb" style="bottom:66px;left:38%">🌿</span><span class="crumb" style="bottom:74px;left:58%;animation-delay:.5s">🍃</span><span class="crumb" style="bottom:62px;left:50%;animation-delay:1s">🌱</span>`
-      : "";
+    const svcTotal = svcRows.reduce((s, r) => s + r.total, 0);
+    const svcErr = svcRows.reduce((s, r) => s + r.errors, 0);
 
-    const pen = document.createElement("div");
-    pen.className = `pen status-${r.status.toLowerCase()}`;
-    pen.addEventListener("click", () => openAgentModal(r));
-    pen.innerHTML = `
-      <div class="pen-head">
-        <span class="pen-icon">${isError ? "🔥" : "🌾"}</span>
-        <div class="pen-title">
-          <h3>Kandang ${r.number}</h3>
-          <p>${r.service} · ${r.role} (${r.direction.toUpperCase()})</p>
+    barn.innerHTML = `
+      <div class="barn-head">
+        <span class="barn-icon">🏠</span>
+        <div class="barn-title">
+          <h2>${svc.name}</h2>
+          <p>WABA ${svc.name} · ${svc.numbers.length} nomor</p>
         </div>
-        <span class="status-chip ${r.status}">${r.status}</span>
+        <div class="barn-stats">
+          <div class="bstat"><div class="v">${fmt(svcTotal)}</div><div class="l">Pesan</div></div>
+          <div class="bstat"><div class="v green">${(100 - svcErrRate * 100).toFixed(2)}%</div><div class="l">Sukses</div></div>
+          <div class="bstat"><div class="v ${svcErr ? "red" : ""}">${fmt(svcErr)}</div><div class="l">Error</div></div>
+        </div>
       </div>
-      <div class="pen-scene">
-        ${bubble}
-        <div class="fence"></div>
-        <div class="grass"></div>
-        <div class="ground"></div>
-        ${zzz}
-        ${crumbs}
-        <div class="animal ${actionClass}">${animal}</div>
-        <div class="eat-bar"><div class="fill" style="width:${isIdle ? "4" : eatPct}%"></div></div>
-      </div>
-      <div class="pen-stats">
-        <div class="stat"><div class="v">${fmt(r.total)}</div><div class="l">Pesan</div></div>
-        <div class="stat"><div class="v green">${(100 - r.errRate * 100).toFixed(2)}%</div><div class="l">Sukses</div></div>
-        <div class="stat"><div class="v ${r.errors > 0 ? "red" : ""}">${fmt(r.errors)}</div><div class="l">Error</div></div>
-        <div class="stat"><div class="v">${r.latency}s</div><div class="l">Latency</div></div>
-      </div>
-      <div class="pen-foot">
-        <span>${isError ? `🔥 ${animal} panik! Klik untuk detail` : isIdle ? `💤 ${animal} lagi tidur (idle)` : `🌿 ${animal} lagi makan — ${r.task}`}</span>
-        <span class="err-flag">${r.errors > 0 ? "⚠ " + r.errors + " error" : "✓ sehat"}</span>
-      </div>
+      <div class="pen-grid"></div>
     `;
-    grid.appendChild(pen);
+    grid.appendChild(barn);
+    const penGrid = barn.querySelector(".pen-grid");
+
+    for (const r of svcRows) {
+      const animal = animalFor(r.id);
+      const isError = r.status === "ERROR";
+      const isIdle = r.status === "IDLE";
+      const isActive = r.status === "ACTIVE";
+
+      const actionClass = isError ? "zombie" : isIdle ? "sleeping" : "eating";
+      const eatPct = Math.min(100, Math.round(r.total / 12000 * 100));
+
+      let bubble = "";
+      if (isError) {
+        bubble = `
+          <div class="animal-bubble">
+            <div class="b-title">🐾 LAPORAN ${animal}</div>
+            "${r.lastError || "Ada yang salah di kandang!"}"<br/>
+            <span style="color:#ff8095">❌ ${r.errors} pesan gagal (${(r.errRate * 100).toFixed(2)}%)</span>
+          </div>`;
+      } else if (r.errRate > 0.01) {
+        bubble = `
+          <div class="animal-bubble warn">
+            <div class="b-title">🐾 CATATAN ${animal}</div>
+            ⚠ ${r.errors} error kecil — sudah diretry, aman
+          </div>`;
+      }
+
+      const zzz = isIdle ? `<div class="zzz">z Z z</div>` : "";
+      const crumbs = isActive
+        ? `<span class="crumb" style="bottom:66px;left:38%">🌿</span><span class="crumb" style="bottom:74px;left:58%;animation-delay:.5s">🍃</span><span class="crumb" style="bottom:62px;left:50%;animation-delay:1s">🌱</span>`
+        : "";
+
+      const pen = document.createElement("div");
+      pen.className = `pen status-${r.status.toLowerCase()}`;
+      pen.addEventListener("click", () => openAgentModal(r));
+      pen.innerHTML = `
+        <div class="pen-head">
+          <span class="pen-icon">${isError ? "🔥" : "🌾"}</span>
+          <div class="pen-title">
+            <h3>${r.number}</h3>
+            <p>${r.role} (${r.direction.toUpperCase()})</p>
+          </div>
+          <span class="status-chip ${r.status}">${r.status}</span>
+        </div>
+        <div class="pen-scene">
+          ${bubble}
+          <div class="fence"></div>
+          <div class="grass"></div>
+          <div class="ground"></div>
+          ${zzz}
+          ${crumbs}
+          <div class="animal ${actionClass}">${animal}</div>
+          <div class="eat-bar"><div class="fill" style="width:${isIdle ? "4" : eatPct}%"></div></div>
+        </div>
+        <div class="pen-stats">
+          <div class="stat"><div class="v">${fmt(r.total)}</div><div class="l">Pesan</div></div>
+          <div class="stat"><div class="v green">${(100 - r.errRate * 100).toFixed(2)}%</div><div class="l">Sukses</div></div>
+          <div class="stat"><div class="v ${r.errors > 0 ? "red" : ""}">${fmt(r.errors)}</div><div class="l">Error</div></div>
+          <div class="stat"><div class="v">${r.latency}s</div><div class="l">Latency</div></div>
+        </div>
+        <div class="pen-foot">
+          <span>${isError ? `🔥 ${animal} panik! Klik untuk detail` : isIdle ? `💤 ${animal} lagi tidur (idle)` : `🌿 ${animal} lagi makan — ${r.task}`}</span>
+          <span class="err-flag">${r.errors > 0 ? "⚠ " + r.errors + " error" : "✓ sehat"}</span>
+        </div>
+      `;
+      penGrid.appendChild(pen);
+    }
   }
 }
 

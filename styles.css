@@ -222,10 +222,44 @@ td .chip-mini { font-size: 10.5px; font-weight: 800; padding: 3px 9px; border-ra
    FARM VIEW — setiap nomor = kandang + hewan
    ============================================================ */
 .farm-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
   padding: 18px 22px;
+}
+
+/* ---------- kamar besar per service (TSO / DSO) ---------- */
+.barn {
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  overflow: hidden;
+}
+.barn.barn-err { border-color: rgba(211,61,92,.55); }
+.barn.barn-warn { border-color: rgba(232,163,61,.45); }
+.barn-head {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 18px; border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(124,92,255,.07), rgba(124,92,255,0));
+}
+.barn-icon { font-size: 26px; }
+.barn-title { flex: 1; min-width: 0; }
+.barn-title h2 { font-size: 16px; letter-spacing: .02em; }
+.barn-title p { font-size: 11.5px; color: var(--text-dim); margin-top: 2px; }
+.barn-stats { display: flex; gap: 10px; }
+.bstat {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 9px; padding: 6px 12px; text-align: center;
+}
+.bstat .v { font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.bstat .v.red { color: var(--red); }
+.bstat .v.green { color: var(--green); }
+.bstat .l { font-size: 8.5px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .05em; }
+.pen-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 14px;
+  padding: 14px 16px 16px;
 }
 .pen {
   position: relative;
